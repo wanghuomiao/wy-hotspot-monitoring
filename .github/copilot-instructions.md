@@ -1,0 +1,5 @@
+- Next.js 16 App Router project for AI hotspot monitoring.
+- Keep the product lightweight and local-first; persist runtime state in `data/state.json`.
+- Use OpenRouter for hotspot verification and summary generation.
+- Keep Twitter/X integration behind `TWITTER_API_IO_KEY` and degrade gracefully when missing.
+- Preserve the distinctive newsroom-radar visual direction across future UI changes.
