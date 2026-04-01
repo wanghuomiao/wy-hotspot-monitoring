@@ -1,4 +1,8 @@
+import { loadEnvConfig } from "@next/env";
+
 import { runMonitoringCycle } from "../lib/monitor";
+
+loadEnvConfig(process.cwd());
 
 const intervalMs = Number(process.env.WORKER_TICK_MS || 300_000);
 

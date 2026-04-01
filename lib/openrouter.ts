@@ -15,7 +15,11 @@ const parsedEvaluationSchema = z.object({
   tags: z.array(z.string()).default([]),
 });
 
-function heuristicEvaluation(monitor: Monitor, candidate: RawCandidate): AIEvaluation {
+function heuristicEvaluation(
+  monitor: Monitor,
+  candidate: RawCandidate,
+  fallbackReason?: string,
+): AIEvaluation {
   const text = `${candidate.title}\n${candidate.excerpt}`;
   const matches = matchesMonitorQuery(monitor, text);
   const heatScore = scoreCandidateMetrics(candidate);
@@ -37,9 +41,11 @@ function heuristicEvaluation(monitor: Monitor, candidate: RawCandidate): AIEvalu
     fakeRiskScore,
     shouldNotify,
     verdict: shouldNotify ? "confirmed" : matches ? "watch" : "reject",
-    reasoning: matches
-      ? "未配置 OpenRouter，已按关键词匹配和来源可信度进行启发式判断。"
-      : "未配置 OpenRouter，当前结果与监控条件的直接匹配较弱。",
+    reasoning: fallbackReason
+      ? `${fallbackReason}${matches ? " 当前结果按关键词匹配和来源可信度做了启发式判断。" : " 当前结果与监控条件的直接匹配较弱，因此仅保留为启发式结果。"}`
+      : matches
+        ? "未配置 OpenRouter，已按关键词匹配和来源可信度进行启发式判断。"
+        : "未配置 OpenRouter，当前结果与监控条件的直接匹配较弱。",
     summary: truncateText(candidate.excerpt || candidate.title, 120),
     tags: [candidate.sourceLabel, matches ? "keyword-match" : "trend-signal"],
     provider: "heuristic",
@@ -120,7 +126,23 @@ export async function evaluateCandidate(monitor: Monitor, candidate: RawCandidat
   });
 
   if (!response.ok) {
-    return heuristicEvaluation(monitor, candidate);
+    let detail = `OpenRouter 调用失败（HTTP ${response.status}）。`;
+
+    try {
+      const errorPayload = (await response.json()) as {
+        error?: {
+          message?: string;
+        };
+      };
+
+      if (errorPayload.error?.message) {
+        detail = `OpenRouter 调用失败：${truncateText(errorPayload.error.message, 160)}`;
+      }
+    } catch {
+      // Ignore invalid error bodies and keep the generic fallback message.
+    }
+
+    return heuristicEvaluation(monitor, candidate, detail);
   }
 
   const payload = (await response.json()) as {
@@ -146,6 +168,6 @@ export async function evaluateCandidate(monitor: Monitor, candidate: RawCandidat
       provider: "openrouter",
     };
   } catch {
-    return heuristicEvaluation(monitor, candidate);
+    return heuristicEvaluation(monitor, candidate, "OpenRouter 返回内容不可解析，已降级。");
   }
 }
